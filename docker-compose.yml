@@ -1,0 +1,227 @@
+# ==============================================
+# Docker Compose - Ambiente WordPress com SSL
+# ==============================================
+#
+# Versão: 3.9
+# Descrição: Infraestrutura completa para WordPress com:
+#   - MySQL 8.0 (banco de dados isolado)
+#   - WordPress (aplicação isolada)
+#   - Nginx (proxy reverso com SSL)
+#
+# Arquitetura de Segurança:
+#   - Rede interna isolada (wordpress_internal_network)
+#   - Apenas Nginx exposto ao host (portas 80 e 443)
+#   - MySQL e WordPress acessíveis SOMENTE via rede interna
+#   - Persistência de dados via volumes nomeados
+#
+# ==============================================
+
+# ==============================================
+# SERVIÇOS
+# ==============================================
+services:
+  
+  # ============================================
+  # SERVIÇO: MySQL (Banco de Dados)
+  # ============================================
+  # Base de dados isolada, não exposta ao host
+  db:
+    image: mysql:8.0
+    container_name: wordpress_mysql
+    restart: always
+    
+    # Variáveis de ambiente (carregadas do arquivo .env)
+    environment:
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      # Otimizações MySQL
+      MYSQL_INITDB_SKIP_TZINFO: 1
+    
+    # Volume para persistência dos dados
+    # Usando diretório local para fácil acesso e backup
+    volumes:
+      - ./db/data:/var/lib/mysql
+      # Configuração customizada do MySQL (opcional)
+      # - ./db/conf.d:/etc/mysql/conf.d:ro
+    
+    # Rede interna isolada
+    networks:
+      - ${INTERNAL_NETWORK}
+    
+    # Healthcheck para garantir que o MySQL está pronto
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    
+    # Limites de recursos (opcional, descomente se necessário)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '1.0'
+    #       memory: 1G
+    #     reservations:
+    #       cpus: '0.5'
+    #       memory: 512M
+
+  # ============================================
+  # SERVIÇO: WordPress
+  # ============================================
+  # Aplicação WordPress isolada, acessível apenas via Nginx
+  wordpress:
+    image: wordpress:latest
+    container_name: wordpress_app
+    restart: always
+    
+    # Dependência: aguarda o MySQL estar saudável
+    depends_on:
+      db:
+        condition: service_healthy
+    
+    # Variáveis de ambiente (carregadas do arquivo .env)
+    environment:
+      WORDPRESS_DB_HOST: ${WORDPRESS_DB_HOST}
+      WORDPRESS_DB_NAME: ${WORDPRESS_DB_NAME}
+      WORDPRESS_DB_USER: ${WORDPRESS_DB_USER}
+      WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD}
+      # Configurações adicionais do WordPress
+      WORDPRESS_TABLE_PREFIX: wp_
+      WORDPRESS_DEBUG: 0
+      # Configuração para funcionar atrás de proxy HTTPS
+      WORDPRESS_CONFIG_EXTRA: |
+        /* SSL e Proxy Reverso */
+        if (isset($$_SERVER['HTTP_X_FORWARDED_PROTO']) && $$_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+          $$_SERVER['HTTPS'] = 'on';
+        }
+        define('FORCE_SSL_ADMIN', true);
+    
+    # Volume para persistência dos arquivos do WordPress
+    # Usando diretório local para fácil acesso aos temas, plugins e uploads
+    volumes:
+      - ./wordpress/data:/var/www/html
+      # Upload customizado de php.ini (opcional)
+      # - ./wordpress/php.ini:/usr/local/etc/php/conf.d/custom.ini:ro
+    
+    # Rede interna isolada (NÃO exposto ao host)
+    networks:
+      - ${INTERNAL_NETWORK}
+    
+    # Healthcheck para garantir que o WordPress está respondendo
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Limites de recursos (opcional)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '1.0'
+    #       memory: 512M
+
+  # ============================================
+  # SERVIÇO: Nginx (Proxy Reverso com SSL)
+  # ============================================
+  # Único serviço exposto ao host, atua como gateway
+  nginx:
+    image: nginx:latest
+    container_name: wordpress_nginx
+    restart: always
+    
+    # Dependência: aguarda o WordPress estar saudável
+    depends_on:
+      wordpress:
+        condition: service_healthy
+    
+    # PORTAS EXPOSTAS AO HOST
+    # 80: HTTP (redireciona para HTTPS)
+    # 443: HTTPS (acesso seguro)
+    ports:
+      - "80:80"
+      - "443:443"
+    
+    # Volumes: configuração, certificados SSL e logs
+    volumes:
+      # Configuração customizada do Nginx
+      - ./nginx/conf/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # Certificados SSL autoassinados
+      - ./nginx/ssl/self-signed.crt:/etc/nginx/ssl/self-signed.crt:ro
+      - ./nginx/ssl/self-signed.key:/etc/nginx/ssl/self-signed.key:ro
+      # Logs do Nginx (para debug e monitoramento)
+      - ./nginx/logs:/var/log/nginx
+    
+    # Rede interna isolada
+    networks:
+      - ${INTERNAL_NETWORK}
+    
+    # Healthcheck para garantir que o Nginx está respondendo
+    healthcheck:
+      test: ["CMD", "curl", "-f", "-k", "https://localhost"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+# ==============================================
+# REDES
+# ==============================================
+# Rede interna isolada para comunicação entre serviços
+# MySQL e WordPress NÃO são acessíveis de fora
+networks:
+  wordpress_internal_network:
+    driver: bridge
+    # Configurações avançadas de rede (opcional)
+    # ipam:
+    #   config:
+    #     - subnet: 172.20.0.0/16
+
+# ==============================================
+# VOLUMES
+# ==============================================
+# Usando bind mounts (diretórios locais) ao invés de volumes nomeados
+# Vantagens:
+#   - Fácil acesso aos dados (./db/data, ./wordpress/data)
+#   - Backup simplificado (copiar diretórios)
+#   - Desenvolvimento facilitado (editar arquivos diretamente)
+#
+# Estrutura de diretórios:
+#   ./db/data/          -> Dados do MySQL
+#   ./wordpress/data/   -> Arquivos do WordPress (wp-content, themes, etc)
+#   ./nginx/logs/       -> Logs do Nginx
+
+# ==============================================
+# COMANDOS ÚTEIS
+# ==============================================
+#
+# Iniciar ambiente:
+#   docker-compose up -d
+#
+# Ver logs:
+#   docker-compose logs -f
+#   docker-compose logs -f nginx
+#   docker-compose logs -f wordpress
+#   docker-compose logs -f db
+#
+# Parar ambiente:
+#   docker-compose down
+#
+# Parar e remover volumes (CUIDADO: apaga dados):
+#   docker-compose down -v
+#
+# Reiniciar um serviço específico:
+#   docker-compose restart nginx
+#
+# Verificar status:
+#   docker-compose ps
+#
+# Acessar container:
+#   docker-compose exec wordpress bash
+#   docker-compose exec db mysql -u root -p
+#
+# ==============================================

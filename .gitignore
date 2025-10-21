@@ -1,0 +1,19 @@
+# Arquivo de variáveis de ambiente (contém senhas)
+.env
+
+# Certificados SSL gerados
+nginx/ssl/*.crt
+nginx/ssl/*.key
+
+# Diretórios de dados dos serviços (contêm dados sensíveis)
+db/data/*
+!db/data/.gitkeep
+wordpress/data/*
+!wordpress/data/.gitkeep
+
+# Logs do Nginx
+nginx/logs/*
+!nginx/logs/.gitkeep
+
+# Logs gerais
+*.log
