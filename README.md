@@ -1,509 +1,174 @@
-# 🚀 Infraestrutura Docker para WordPress com SSL
+# Security's Sistem Project
 
-Ambiente Docker completo e seguro para desenvolvimento e testes de WordPress com SSL/TLS autoassinado, proxy reverso Nginx e isolamento de rede.
+## Operational Sistem (Tests Virtual Machine)
 
----
+- **OS:** Ubuntu 24.04.3 LTS (Noble Numbat)
+- **Kernel:** Linux 6.8.0-86-generic
+- **Architecture:** x86-64
+- **Virtualization:** Oracle VirtualBox (KVM)
+- **CPU:** Intel Core i7-1260P (4 cores, 12th Gen)
+- **Memory:** 2GB RAM, 2GB Swap
+- **Disk:** 12GB root partition (65% used)
+- **Network:** IP 172.20.10.14/28 (enp0s3)
 
-## 📋 Índice
-
-- [Características](#-características)
-- [Arquitetura](#-arquitetura)
-- [Pré-requisitos](#-pré-requisitos)
-- [Estrutura do Projeto](#-estrutura-do-projeto)
-- [Instalação](#-instalação)
-- [Uso](#-uso)
-- [Configuração](#-configuração)
-- [Segurança](#-segurança)
-- [Troubleshooting](#-troubleshooting)
-- [Comandos Úteis](#-comandos-úteis)
-
----
-
-## ✨ Características
-
-- ✅ **WordPress** (última versão estável)
-- ✅ **MySQL 8.0** com persistência de dados
-- ✅ **Nginx** como proxy reverso com SSL/TLS
-- ✅ **Certificado SSL autoassinado** para testes locais
-- ✅ **Rede interna isolada** (apenas Nginx exposto)
-- ✅ **Redirecionamento automático HTTP → HTTPS**
-- ✅ **Health checks** em todos os serviços
-- ✅ **Variáveis de ambiente** para configurações sensíveis
-- ✅ **Volumes persistentes** para dados e uploads
-
----
-
-## 🏗️ Arquitetura
-
-```
-┌─────────────────────────────────────────────────┐
-│                  MÁQUINA HOST                    │
-│                                                  │
-│  ┌──────────────────────────────────────────┐   │
-│  │         Portas Expostas                  │   │
-│  │   HTTP (80) ──┐    HTTPS (443) ──┐      │   │
-│  └───────────────┼───────────────────┼──────┘   │
-└─────────────────┼───────────────────┼───────────┘
-                  │                   │
-                  ▼                   ▼
-         ┌─────────────────────────────────┐
-         │         NGINX CONTAINER          │
-         │    (Proxy Reverso + SSL)        │
-         │  • Redirecionamento HTTP→HTTPS  │
-         │  • Terminação SSL               │
-         │  • Headers de Segurança         │
-         └──────────────┬──────────────────┘
-                        │
-              ┌─────────┴──────────┐
-              │  Rede Interna      │
-              │  (Isolada)         │
-              └─────────┬──────────┘
-                        │
-         ┌──────────────┴──────────────────┐
-         │                                  │
-         ▼                                  ▼
-┌──────────────────┐            ┌──────────────────┐
-│   WORDPRESS      │            │      MYSQL       │
-│   CONTAINER      │◄───────────┤   CONTAINER      │
-│                  │            │                  │
-│ • PHP-FPM        │            │ • MySQL 8.0      │
-│ • Apache         │            │ • Port 3306      │
-│ • Port 80        │            │ (Interno)        │
-│ (Interno)        │            │                  │
-└────────┬─────────┘            └────────┬─────────┘
-         │                               │
-         ▼                               ▼
-  ┌─────────────┐                ┌─────────────┐
-  │   Volume:   │                │   Volume:   │
-  │ WordPress   │                │   MySQL     │
-  │   Data      │                │    Data     │
-  └─────────────┘                └─────────────┘
-```
-
-### 🔒 Isolamento de Rede
-
-- **Rede Interna (`wordpress_internal_network`)**: Todos os containers se comunicam por essa rede privada
-- **MySQL**: Acessível SOMENTE pelos containers na rede interna
-- **WordPress**: Acessível SOMENTE pelos containers na rede interna
-- **Nginx**: ÚNICO serviço exposto ao host (portas 80 e 443)
-
----
-
-## 📦 Pré-requisitos
-
-Certifique-se de ter instalado:
-
-- [Docker](https://docs.docker.com/get-docker/) (versão 20.10+)
-- [Docker Compose](https://docs.docker.com/compose/install/) (versão 1.29+)
-- **OpenSSL** (para gerar certificados SSL)
-
-### Verificar instalação:
+## Setup Server
 
 ```bash
-docker --version
-docker-compose --version
-openssl version
+sudo apt update && sudo apt upgrade -y
+sudo apt install openssh-server openssh-client -y
+sudo systemctl enable ssh
+sudo systemctl start ssh
+sudo systemctl status ssh
 ```
 
----
 
-## 📁 Estrutura do Projeto
-
-```
-ss-project/
-├── docker-compose.yml          # Orquestração de containers
-├── .env                        # Variáveis de ambiente (senhas, configurações)
-├── .gitignore                  # Arquivos ignorados pelo Git
-├── generate-ssl.sh             # Script para gerar certificado SSL
-├── README.md                   # Esta documentação
-│
-├── db/
-│   ├── data/                  # Dados persistentes do MySQL
-│   │   └── .gitkeep           # Mantém estrutura no Git
-│   └── README.md              # Documentação do MySQL
-│
-├── wordpress/
-│   ├── data/                  # Arquivos do WordPress (themes, plugins, uploads)
-│   │   └── .gitkeep           # Mantém estrutura no Git
-│   └── README.md              # Documentação do WordPress
-│
-└── nginx/
-    ├── conf/
-    │   └── nginx.conf         # Configuração do Nginx (proxy reverso)
-    ├── ssl/
-    │   ├── self-signed.crt    # Certificado SSL (gerado)
-    │   └── self-signed.key    # Chave privada SSL (gerado)
-    ├── logs/                  # Logs de acesso e erro do Nginx
-    │   └── .gitkeep           # Mantém estrutura no Git
-    └── README.md              # Documentação do Nginx
-```
-
----
-
-## 🚀 Instalação
-
-### 1️⃣ Clone ou baixe este projeto
+## Setup Client
 
 ```bash
-cd /home/kauan/Desktop/ss-project
+ssh-keygen -t ed25519
+ssh-copy-id <user>@<host>
+ssh <user>@<host>
 ```
 
-### 2️⃣ Configure as variáveis de ambiente
-
-Edite o arquivo `.env` e altere as senhas padrão:
+## Multiplexing SSH and HTTPS on Port 443
 
 ```bash
-nano .env
+sudo apt update
+sudo apt install sslh -y
+
+sudo tee /etc/default/sslh << EOF
+DAEMON=/usr/sbin/sslh
+RUN=yes
+DAEMON_OPTS="--user sslh --listen 0.0.0.0:443 --ssh 127.0.0.1:22 --tls 127.0.0.1:8443 --pidfile /var/run/sslh/sslh.pid"
+EOF
+
+sudo tee /etc/tmpfiles.d/sslh.conf > /dev/null << EOF
+d /var/run/sslh 0755 sslh sslh -
+f /var/run/sslh/sslh.pid 0644 sslh sslh -
+EOF
+
+sudo systemd-tmpfiles --create /etc/tmpfiles.d/sslh.conf
+
+sudo systemctl enable sslh
+sudo systemctl start sslh
+sudo systemctl status sslh
 ```
 
-**⚠️ IMPORTANTE:** Nunca use as senhas padrão em produção!
-
-### 3️⃣ Gere o certificado SSL
-
-Execute o script automatizado:
+## Docker installation
 
 ```bash
-./generate-ssl.sh
+sudo apt-get update
+sudo apt-get install ca-certificates curl -y
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+  $(. /etc/os-release && echo "${UBUNTU_CODENAME:-$VERSION_CODENAME}") stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt-get update
+
+sudo apt-get install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin -y
+
+sudo systemctl enable docker
+sudo systemctl start docker
+sudo systemctl status docker
 ```
 
-Ou manualmente:
+## WordPress Setup
+
+<!-- > **Note:** Check port 80 is free
 
 ```bash
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-    -keyout nginx/ssl/self-signed.key \
-    -out nginx/ssl/self-signed.crt \
-    -subj "/C=BR/ST=State/L=City/O=Development/OU=IT/CN=localhost" \
-    -addext "subjectAltName=DNS:localhost,IP:127.0.0.1"
-```
-
-### 4️⃣ Inicie o ambiente
-
-```bash
-docker-compose up -d
-```
-
-### 5️⃣ Aguarde a inicialização
-
-Acompanhe os logs:
-
-```bash
-docker-compose logs -f
-```
-
-Aguarde até ver mensagens indicando que todos os serviços estão prontos.
-
-### 6️⃣ Acesse o WordPress
-
-Abra seu navegador e acesse:
-
-**🌐 https://localhost**
-
-⚠️ **Aviso de Segurança**: Seu navegador alertará sobre o certificado autoassinado. Isso é **normal** e esperado. Clique em "Avançado" → "Aceitar Risco e Continuar" (Firefox) ou "Avançar para localhost" (Chrome).
-
----
-
-## 🎯 Uso
-
-### Acessar o WordPress
-
-1. Navegue para: **https://localhost**
-2. Complete a instalação do WordPress:
-   - Escolha idioma
-   - Defina título do site
-   - Crie usuário administrador
-   - Defina email
-
-### Acessar o banco de dados
-
-Para conectar ao MySQL via terminal:
-
-```bash
-docker-compose exec db mysql -u wordpress_user -p
-```
-
-Senha: (definida no arquivo `.env`)
-
-### Parar o ambiente
-
-```bash
-docker-compose down
-```
-
-### Reiniciar o ambiente
-
-```bash
-docker-compose restart
-```
-
----
-
-## ⚙️ Configuração
-
-### Variáveis de Ambiente (`.env`)
-
-| Variável | Descrição | Padrão |
-|----------|-----------|--------|
-| `MYSQL_DATABASE` | Nome do banco de dados | `wordpress_db` |
-| `MYSQL_USER` | Usuário do MySQL | `wordpress_user` |
-| `MYSQL_PASSWORD` | Senha do usuário MySQL | `secure_password_123` |
-| `MYSQL_ROOT_PASSWORD` | Senha do root MySQL | `root_secure_password_456` |
-| `WORDPRESS_DB_HOST` | Host do banco (interno) | `db:3306` |
-| `INTERNAL_NETWORK` | Nome da rede interna | `wordpress_internal_network` |
-
-### Armazenamento de Dados
-
-Os dados são armazenados em **diretórios locais** (bind mounts) ao invés de volumes Docker:
-
-| Diretório | Conteúdo | Backup |
-|-----------|----------|--------|
-| `./db/data/` | Dados do MySQL | `mysqldump` ou copiar diretório |
-| `./wordpress/data/` | Arquivos WordPress | `tar` ou copiar diretório |
-| `./nginx/logs/` | Logs do Nginx | Rotação automática recomendada |
-
-**Vantagens:**
-- ✅ Acesso direto aos arquivos
-- ✅ Backup simplificado (copiar pastas)
-- ✅ Desenvolvimento facilitado (editar temas/plugins)
-- ✅ Fácil migração entre ambientes
-
-### Portas Expostas
-
-| Serviço | Porta Interna | Porta Externa | Protocolo |
-|---------|---------------|---------------|-----------|
-| Nginx   | 80            | 80            | HTTP (redireciona para HTTPS) |
-| Nginx   | 443           | 443           | HTTPS |
-| MySQL   | 3306          | ❌ (não exposto) | TCP |
-| WordPress | 80          | ❌ (não exposto) | HTTP |
-
----
-
-## 🔐 Segurança
-
-### ✅ Implementações de Segurança
-
-1. **Rede Isolada**: MySQL e WordPress não são acessíveis externamente
-2. **SSL/TLS**: Todo tráfego HTTP é redirecionado para HTTPS
-3. **Headers de Segurança**:
-   - `Strict-Transport-Security` (HSTS)
-   - `X-Frame-Options`
-   - `X-Content-Type-Options`
-   - `X-XSS-Protection`
-4. **Proteção de Arquivos**: Bloqueio de acesso a arquivos `.ht*`, `.git`, e PHPs em uploads
-5. **Health Checks**: Monitoramento automático da saúde dos serviços
-
-### ⚠️ Avisos de Segurança
-
-- **NÃO USE EM PRODUÇÃO** sem modificações adequadas
-- **ALTERE TODAS AS SENHAS PADRÃO** do arquivo `.env`
-- **Certificados autoassinados** são SOMENTE para desenvolvimento
-- Para produção, use certificados válidos (Let's Encrypt, etc.)
-- Adicione `.env` ao `.gitignore` (já configurado)
-
----
-
-## 🔧 Troubleshooting
-
-### Problema: "Certificado não confiável"
-
-✅ **Normal**: Certificados autoassinados não são confiáveis por padrão. Aceite a exceção no navegador.
-
-### Problema: Porta 80 ou 443 já em uso
-
-```bash
-# Verificar processos usando as portas
 sudo lsof -i :80
-sudo lsof -i :443
-
-# Parar Apache (se estiver rodando)
-sudo systemctl stop apache2
 ```
 
-### Problema: Containers não iniciam
+--- -->
 
 ```bash
-# Ver logs detalhados
-docker-compose logs
+mkdir -p /app && cd /app
+git clone https://github.com/KauanCalheiro/ss-wordpress.git
+cd ss-wordpress
 
-# Verificar status
-docker-compose ps
+cat > .env << EOF
+MYSQL_DATABASE=wordpress_db
+MYSQL_USER=wordpress_user
+MYSQL_PASSWORD=secure_password_123
+MYSQL_ROOT_PASSWORD=root_secure_password_456
+WORDPRESS_DB_HOST=db:3306
+WORDPRESS_DB_NAME=wordpress_db
+WORDPRESS_DB_USER=wordpress_user
+WORDPRESS_DB_PASSWORD=secure_password_123
+INTERNAL_NETWORK=wordpress_internal_network
+EOF
 
-# Rebuild completo
-docker-compose down -v
-docker-compose up -d --build
+# In oficial server must use valid SSL certificates
+# TODO: Let's Encrypt
+bash generate-ssl.sh
+
+sudo docker compose up -d
 ```
 
-### Problema: WordPress não conecta ao MySQL
-
-1. Verifique as variáveis no `.env`
-2. Aguarde o health check do MySQL:
-   ```bash
-   docker-compose logs db
-   ```
-3. Reinicie o WordPress:
-   ```bash
-   docker-compose restart wordpress
-   ```
-
-### Problema: Erro de permissão nos volumes
+## SSH Configuration
 
 ```bash
-# Ajustar permissões (se necessário)
-sudo chown -R $USER:$USER volumes/
+sudo tee -a /etc/ssh/sshd_config << EOF
+Port 22
+PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes
+EOF
+
+sudo systemctl restart sshd
+sudo systemctl status sshd
 ```
 
----
-
-## 📚 Comandos Úteis
-
-### Gerenciamento de Containers
+## Fail2ban Configuration
 
 ```bash
-# Iniciar em background
-docker-compose up -d
+sudo apt install fail2ban -y
 
-# Iniciar e ver logs em tempo real
-docker-compose up
+sudo tee /etc/fail2ban/filter.d/sshd-aggressive.conf << EOF
+[Definition]
+failregex = ^.* sshd\[.*\]: Failed .* from <HOST>
+            ^.* sshd\[.*\]: Invalid user .* from <HOST>
+            ^.* sshd\[.*\]: Connection closed by authenticating user .* <HOST> port .* \[preauth\]
+            ^.* sshd\[.*\]: Disconnected from authenticating user .* <HOST> port .* \[preauth\]
+ignoreregex =
+EOF
 
-# Parar containers
-docker-compose down
+sudo tee /etc/fail2ban/jail.local << EOF
+# SSH direto na porta 22 (fallback/backup)
+[sshd-direct]
+enabled = true
+port = 22
+filter = sshd-aggressive
+logpath = /var/log/auth.log
+maxretry = 3
+bantime = 600
+findtime = 600
 
-# Parar e remover volumes (⚠️ APAGA DADOS)
-docker-compose down -v
+# SSH via SSLH na porta 443 (principal)
+[sshd-sslh]
+enabled = true
+port = 443
+filter = sshd-aggressive
+logpath = /var/log/auth.log
+maxretry = 3
+bantime = 600
+findtime = 600
+EOF
 
-# Reiniciar um serviço específico
-docker-compose restart nginx
-docker-compose restart wordpress
-docker-compose restart db
-
-# Ver status dos containers
-docker-compose ps
-
-# Ver logs
-docker-compose logs -f
-docker-compose logs -f nginx
-docker-compose logs -f wordpress
-docker-compose logs -f db
+sudo systemctl restart fail2ban
+sudo systemctl status fail2ban
 ```
 
-### Acesso aos Containers
+### Check status of fail2ban
 
 ```bash
-# Acessar bash do WordPress
-docker-compose exec wordpress bash
+sudo fail2ban-client status sshd-direct
+sudo fail2ban-client status sshd-sslh
 
-# Acessar MySQL
-docker-compose exec db mysql -u root -p
-
-# Executar WP-CLI
-docker-compose exec wordpress wp --info --allow-root
+sudo fail2ban-client status
 ```
-
-### Backup e Restore
-
-```bash
-# ========================================
-# BACKUP DO BANCO DE DADOS
-# ========================================
-
-# Método 1: SQL dump (recomendado)
-docker-compose exec db mysqldump -u root -p wordpress_db > backup_$(date +%Y%m%d).sql
-
-# Método 2: Copiar diretório (container deve estar parado)
-docker-compose down
-cp -r db/data db/data_backup_$(date +%Y%m%d)
-docker-compose up -d
-
-# ========================================
-# BACKUP DO WORDPRESS
-# ========================================
-
-# Backup completo
-tar -czf wordpress_backup_$(date +%Y%m%d).tar.gz wordpress/data/
-
-# Backup apenas do wp-content (temas, plugins, uploads)
-tar -czf wp-content_backup_$(date +%Y%m%d).tar.gz wordpress/data/wp-content/
-
-# ========================================
-# RESTORE
-# ========================================
-
-# Restore do banco de dados (via SQL)
-docker-compose exec -T db mysql -u root -p wordpress_db < backup_20231021.sql
-
-# Restore do WordPress (descompactar)
-docker-compose down
-rm -rf wordpress/data/*
-tar -xzf wordpress_backup_20231021.tar.gz
-docker-compose up -d
-
-# ========================================
-# BACKUP AUTOMÁTICO (Cron)
-# ========================================
-
-# Adicionar ao crontab (backup diário às 2h da manhã)
-# crontab -e
-# 0 2 * * * cd /home/kauan/Desktop/ss-project && docker-compose exec -T db mysqldump -u root -p${MYSQL_ROOT_PASSWORD} wordpress_db > backup_$(date +\%Y\%m\%d).sql
-```
-
-### Limpeza
-
-```bash
-# Remover containers órfãos
-docker-compose down --remove-orphans
-
-# Limpar volumes não utilizados
-docker volume prune
-
-# Limpar imagens não utilizadas
-docker image prune -a
-```
-
----
-
-## 📝 Notas Adicionais
-
-### Configuração Avançada do WordPress
-
-Para adicionar configurações customizadas ao `wp-config.php`, edite a seção `WORDPRESS_CONFIG_EXTRA` no `docker-compose.yml`.
-
-### Performance
-
-Para ambientes de produção, considere:
-- Aumentar recursos alocados (CPU, RAM)
-- Configurar cache (Redis, Memcached)
-- Otimizar configurações do MySQL
-- Usar volumes com drivers otimizados
-
-### Certificado SSL para Produção
-
-Para produção, substitua o certificado autoassinado por um certificado válido:
-
-1. Use **Let's Encrypt** com Certbot
-2. Monte os certificados válidos no Nginx
-3. Configure renovação automática
-
----
-
-## 📄 Licença
-
-Este projeto é livre para uso educacional e de desenvolvimento.
-
----
-
-## 🤝 Contribuições
-
-Sinta-se livre para reportar issues ou sugerir melhorias!
-
----
-
-## 📞 Suporte
-
-Para problemas relacionados a:
-- **Docker**: https://docs.docker.com/
-- **WordPress**: https://wordpress.org/support/
-- **Nginx**: https://nginx.org/en/docs/
-- **MySQL**: https://dev.mysql.com/doc/
-
----
-
-**Desenvolvido com ❤️ para ambientes de desenvolvimento seguro**
