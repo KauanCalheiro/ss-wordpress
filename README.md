@@ -39,7 +39,7 @@ sudo apt install sslh -y
 sudo tee /etc/default/sslh << EOF
 DAEMON=/usr/sbin/sslh
 RUN=yes
-DAEMON_OPTS="--user sslh --listen 0.0.0.0:443 --ssh 127.0.0.1:22 --tls 127.0.0.1:8443 --pidfile /var/run/sslh/sslh.pid"
+DAEMON_OPTS="--user sslh --listen 0.0.0.0:443 --ssh 127.0.0.1:22 --tls 127.0.0.1:4433 --pidfile /var/run/sslh/sslh.pid"
 EOF
 
 sudo tee /etc/tmpfiles.d/sslh.conf > /dev/null << EOF
