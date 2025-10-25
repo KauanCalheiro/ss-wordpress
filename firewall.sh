@@ -29,9 +29,11 @@ $IPT -P OUTPUT ACCEPT
 success "Defined default policy\n"
 
 info "\nFlushing rules and custom chains\n"
-$IPT -F
-$IPT -X
-success "Flushed rules and custom chains\n"
+# Flush only filter table rules (not affecting Docker's nat/mangle tables)
+$IPT -t filter -F
+$IPT -t filter -X
+# Note: This preserves Docker rules in nat and other tables
+success "Flushed filter table rules and custom chains\n"
 
 ###############################
 # SSHTTP setup
