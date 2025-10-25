@@ -51,8 +51,15 @@ $IPT -t mangle -N DIVERT || true
 
 echo "Using network device $DEV"
 
-$IPT -t mangle -A PREROUTING -p tcp -m multiport --dports 2022,4433 -j DIVERT
-$IPT -t mangle -A OUTPUT -p tcp -m multiport --sports 2022,4433 -j DIVERT
+for p in $PORTS; do
+	echo "Setting up port $p ..."
+
+	# $IPT -A INPUT -i $DEV -p tcp --dport $p -j DROP
+
+	$IPT -t mangle -A OUTPUT -p tcp -o $DEV --sport $p -j DIVERT
+done
+
+$IPT -t mangle -A PREROUTING -p tcp -m socket -j DIVERT
 
 $IPT -t mangle -A DIVERT -j MARK --set-mark 1
 $IPT -t mangle -A DIVERT -j ACCEPT
