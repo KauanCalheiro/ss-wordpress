@@ -30,28 +30,41 @@ ssh-copy-id <user>@<host>
 ssh <user>@<host>
 ```
 
-## Multiplexing SSH and HTTPS on Port 443
+## Cloning Repository
 
 ```bash
-sudo apt update
-sudo apt install sslh -y
+mkdir -p /app && cd /app
+git clone https://github.com/KauanCalheiro/ss-wordpress.git
+```
 
-sudo tee /etc/default/sslh << EOF
-DAEMON=/usr/sbin/sslh
-RUN=yes
-DAEMON_OPTS="--user sslh --listen 0.0.0.0:443 --ssh 127.0.0.1:22 --tls 127.0.0.1:4433 --pidfile /var/run/sslh/sslh.pid"
+## Multiplexing SSH and HTTPS on Port 443
+
+### Alter SSH in port 2022
+
+```bash
+sudo tee -a /etc/ssh/sshd_config << EOF
+Port 22
+Port 2022
 EOF
 
-sudo tee /etc/tmpfiles.d/sslh.conf > /dev/null << EOF
-d /var/run/sslh 0755 sslh sslh -
-f /var/run/sslh/sslh.pid 0644 sslh sslh -
-EOF
+sudo reboot
+```
 
-sudo systemd-tmpfiles --create /etc/tmpfiles.d/sslh.conf
+### Install and configure sshttp
 
-sudo systemctl enable sslh
-sudo systemctl start sslh
-sudo systemctl status sslh
+```bash
+cd /app/ss-wordpress/sshttp/src
+
+sudo apt install build-essential libcap-dev git -y
+
+sudo make
+
+sudo /app/ss-wordpress/sshttp/iptables/nf-setup
+
+sudo mkdir -p /var/empty/sshttp
+sudo chmod 755 /var/empty/sshttp
+
+sudo /app/ss-wordpress/sshttp/src/sshttpd -S 2022 -L 443 -H 4433 -R /var/empty/sshttp
 ```
 
 ## Docker installation
@@ -78,18 +91,17 @@ sudo systemctl status docker
 
 ## WordPress Setup
 
-<!-- > **Note:** Check port 80 is free
+### Disable Apache2 to free port 80
 
 ```bash
-sudo lsof -i :80
+sudo systemctl stop apache2
+sudo systemctl disable apache2
 ```
 
---- -->
+### WordPress Installation
 
 ```bash
-mkdir -p /app && cd /app
-git clone https://github.com/KauanCalheiro/ss-wordpress.git
-cd ss-wordpress
+cd /app/ss-wordpress
 
 cat > .env << EOF
 MYSQL_DATABASE=wordpress_db
@@ -103,8 +115,6 @@ WORDPRESS_DB_PASSWORD=secure_password_123
 INTERNAL_NETWORK=wordpress_internal_network
 EOF
 
-# In oficial server must use valid SSL certificates
-# TODO: Let's Encrypt
 bash generate-ssl.sh
 
 sudo docker compose up -d
@@ -114,7 +124,6 @@ sudo docker compose up -d
 
 ```bash
 sudo tee -a /etc/ssh/sshd_config << EOF
-Port 22
 PermitRootLogin no
 PasswordAuthentication no
 PubkeyAuthentication yes

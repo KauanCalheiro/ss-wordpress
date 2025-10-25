@@ -2,30 +2,30 @@
 
 DEV=enp0s3
 
-PORTS="22 4433"
+PORTS="2022 4433"
 
 modprobe nf_conntrack_ipv4 || true
 modprobe nf_conntrack || true
 modprobe xt_conntrack || true
 
-iptables-nft -t mangle -N DIVERT || true
+iptables -t mangle -N DIVERT || true
 
 echo "Using network device $DEV"
 
 for p in $PORTS; do
 	echo "Setting up port $p ..."
 
-	iptables-nft -A INPUT -i $DEV -p tcp --dport $p -j DROP
+	iptables -A INPUT -i $DEV -p tcp --dport $p -j DROP
 
-	iptables-nft -t mangle -A OUTPUT -p tcp -o $DEV --sport $p -j DIVERT
+	iptables -t mangle -A OUTPUT -p tcp -o $DEV --sport $p -j DIVERT
 done
 
-iptables-nft -t mangle -A PREROUTING -p tcp -m socket -j DIVERT
+iptables -t mangle -A PREROUTING -p tcp -m socket -j DIVERT
 
-iptables-nft -t mangle -A DIVERT -j MARK --set-mark 1
-iptables-nft -t mangle -A DIVERT -j ACCEPT
+iptables -t mangle -A DIVERT -j MARK --set-mark 1
+iptables -t mangle -A DIVERT -j ACCEPT
 
 ip rule add fwmark 1 lookup 123 || true
 ip route add local 0.0.0.0/0 dev lo table 123
 
-iptables-nft -A INPUT -m conntrack -i lo --ctstate NEW -j LOG
+iptables -A INPUT -m conntrack -i lo --ctstate NEW -j LOG
