@@ -20,6 +20,9 @@ sudo systemctl enable sslh
 sudo systemctl start sslh
 sudo systemctl status sslh
 
+sudo systemctl stop apache2
+sudo systemctl disable apache2
+
 sudo apt-get update
 sudo apt-get install ca-certificates curl -y
 sudo install -m 0755 -d /etc/apt/keyrings
