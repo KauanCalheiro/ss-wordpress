@@ -54,7 +54,7 @@ echo "Using network device $DEV"
 for p in $PORTS; do
 	echo "Setting up port $p ..."
 
-	$IPT -A INPUT -i $DEV -p tcp --dport $p -j DROP
+	# $IPT -A INPUT -i $DEV -p tcp --dport $p -j DROP
 
 	$IPT -t mangle -A OUTPUT -p tcp -o $DEV --sport $p -j DIVERT
 done
